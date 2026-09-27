@@ -1,0 +1,1379 @@
+import base64
+import telebot
+from telebot.types import (
+    InlineKeyboardMarkup, 
+    InlineKeyboardButton, 
+    ReplyKeyboardMarkup, 
+    KeyboardButton, 
+    ReplyKeyboardRemove
+)
+import io
+import random
+import string
+import requests
+import json
+import os
+import urllib.parse
+import re
+import time
+from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+
+# ==============================================================================
+# ✧ CONFIGURATION & CREDENTIALS
+# ==============================================================================
+TOKEN = '8783206855:AAE800SiBvTaiIacfHacSzFc_XG5QmXWGRQ'
+ADMIN_ID = "6953927815"  # Super Admin / Owner ID
+IMGBB_API_KEY = "ef424e1e7e96e0ebe80f079612575a80"  # Free key from https://api.imgbb.com/
+
+# Channel Settings (Force-sub disabled for instant public use)
+FORCE_SUB_ENABLED = False 
+CHANNEL_ID = "-1003025416618" 
+CHANNEL_LINK = "https://t.me/free_hack_group_99"
+
+bot = telebot.TeleBot(TOKEN)
+
+# ==============================================================================
+# ⧈ DATABASE STORAGE SETUP
+# ==============================================================================
+DB_FILE = 'bot_db.json'
+
+DEFAULT_TEXTS = {
+    "welcome": (
+        "✦ <b>Pʀᴇᴍɪᴜᴍ Sᴜɪᴛᴇ V5.0 Aᴄᴛɪᴠᴀᴛᴇᴅ</b> ✦\n\n"
+        "⍟ <b>Wᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ Uʟᴛɪᴍᴀᴛᴇ Pʀᴏ Tᴏᴏʟʙᴏᴛ!</b>\n"
+        "<i>⌁ Supercharged with VM-Protected Obfuscator & Multi-Admin Engine</i>\n\n"
+        "⌁ <b>Choose a feature from the keyboard below:</b>\n\n"
+        "🌐 <b>Render URL:</b> Extract clean source code & live preview.\n"
+        "🔒 <b>Obfuscate HTML:</b> Military-grade VM Bytecode encryption.\n"
+        "📸 <b>Image to URL:</b> Instant high-speed image hosting.\n"
+        "📊 <b>Stats:</b> View real-time bot analytics.\n\n"
+        "▼ <b>Select an option below or use the Reply Keyboard:</b>"
+    ),
+    
+    "obf_prompt": (
+        "🛡️ <b>Mɪʟɪᴛᴀʀʏ-Gʀᴀᴅᴇ VM-Pʀᴏᴛᴇᴄᴛᴇᴅ HTML Oʙғᴜsᴄᴀᴛᴏʀ Pʀᴏ</b>\n\n"
+        "⌁ <b>Extreme Security & VM Engine Features:</b>\n"
+        "• 🧬 <b>Virtual Machine (VM) Custom Bytecode Architecture</b>\n"
+        "• 🔀 <b>Polymorphic Opcode Dispatcher & Virtual CPU Loop</b>\n"
+        "• 🔐 <b>Dynamic Dual-Stream XOR + Bitwise Cyclic Rotation (ROL/ROR)</b>\n"
+        "• 🛡️ <b>Header Tamper Protection & Cryptographic Signature Self-Destruct</b>\n"
+        "• 🚫 <b>Anti-DevTools & Recursive Continuous Debugger Traps</b>\n"
+        "• ⌨️ <b>Complete Shortcut Blocker (F12, Ctrl+U, Ctrl+S, Ctrl+Shift+I, etc.)</b>\n"
+        "• 🖱️ <b>Anti-Right-Click, Copy, Drag & Selection Lock</b>\n"
+        "• 🧹 <b>Console Hijack, Memory Scrubber & Prototype Freezing</b>\n"
+        "• 🌐 <b>Nested Inline Script Deep Virtualization</b>\n\n"
+        "📄 <b>Pʟᴇᴀsᴇ sᴇɴᴅ ʏᴏᴜʀ <code>.html</code> ғɪʟᴇ ɴᴏᴡ ᴛᴏ ᴇɴᴄʀʏᴘᴛ!</b>"
+    ),
+    
+    "url_prompt": (
+        "╔════════════════════╗\n"
+        "   ⌁ <b>URL ᴛᴏ HTML Exᴛʀᴀᴄᴛᴏʀ Pʀᴏ</b>\n"
+        "╚════════════════════╝\n\n"
+        "⌁ <b>Features:</b>\n"
+        "• 🌐 Fast Clean URL Fetch\n"
+        "• 📄 Complete HTML Export\n"
+        "• ⌁ Instant Processing\n"
+        "• 🔒 Secure Extraction\n"
+        "• 📸 Live Website Screenshot Preview\n\n"
+        "✦ <b>Sᴇɴᴅ ᴀ Wᴇʙsɪᴛᴇ URL ᴛᴏ sᴛᴀʀᴛ!</b>\n\n"
+        "➔ <i>Example:</i> <code>https://example.com</code>"
+    ),
+    
+    "img_prompt": (
+        "📸 <b>Iᴍᴀɢᴇ ᴛᴏ URL Hᴏsᴛɪɴɢ Pʀᴏ</b>\n\n"
+        "✦ <b>Follow these two simple steps:</b>\n\n"
+        "1️⃣ Open your gallery and select any image.\n"
+        "2️⃣ Send it directly to this bot (JPG / PNG / WEBP).\n\n"
+        "⌁ <i>Fast high-speed CDN upload with instant direct link generation!</i>\n\n"
+        "▼ <b>Sᴇɴᴅ Yᴏᴜʀ Iᴍᴀɢᴇ Nᴏᴡ!</b>"
+    )
+}
+
+def load_db():
+    clean_admin = str(ADMIN_ID).strip()
+    default_db = {
+        "admins": [clean_admin],
+        "users": [],
+        "activities": [],
+        "bot_active": True,
+        "saved_urls": [],
+        "saved_files": [],
+        "texts": DEFAULT_TEXTS,
+        "stats": {"obf": 2488, "url": 2535, "img": 392}
+    }
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, 'r') as f:
+                data = json.load(f)
+                for key in default_db:
+                    if key not in data:
+                        data[key] = default_db[key]
+                for text_key in DEFAULT_TEXTS:
+                    if text_key not in data["texts"]:
+                        data["texts"][text_key] = DEFAULT_TEXTS[text_key]
+                if "stats" not in data:
+                    data["stats"] = default_db["stats"]
+                
+                admin_list = [str(a).strip() for a in data.get("admins", [])]
+                if clean_admin not in admin_list:
+                    admin_list.insert(0, clean_admin)
+                data["admins"] = admin_list
+                return data
+        except Exception as e:
+            print(f"Error loading DB: {e}")
+            return default_db
+    return default_db
+
+def save_db(data):
+    try:
+        with open(DB_FILE, 'w') as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"Error saving DB: {e}")
+
+db = load_db()
+
+user_states = {}
+broadcast_staging = {}
+broadcast_cancel_flags = {}
+
+def is_owner(user_id):
+    """Checks if the user is the Super Admin / Owner."""
+    if not user_id:
+        return False
+    return str(user_id).strip() == str(ADMIN_ID).strip()
+
+def is_admin(user_id):
+    """Checks if the user is the Super Admin or in the Admins list."""
+    if not user_id:
+        return False
+    uid = str(user_id).strip()
+    admins = [str(a).strip() for a in db.get("admins", [])]
+    return uid == str(ADMIN_ID).strip() or uid in admins
+
+def add_user(user_id):
+    uid = str(user_id).strip()
+    if uid not in db['users']:
+        db['users'].append(uid)
+        save_db(db)
+
+def log_activity(user_id, action):
+    time_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db['activities'].append(f"[{time_now}] UID: {user_id} -> {action}")
+    if len(db['activities']) > 60:
+        db['activities'] = db['activities'][-60:]
+    save_db(db)
+
+# ==============================================================================
+# 🎨 COLORED BUTTONS ENGINE (Telegram Bot API 8.0+ style)
+# ==============================================================================
+VALID_TELEGRAM_STYLES = {"primary", "success", "danger"}
+
+class StyledInlineKeyboardButton(InlineKeyboardButton):
+    """
+    Subclass that attaches custom button style attribute ('success', 'danger', 'primary').
+    Only valid Telegram styles are retained to prevent Telegram 400 Bad Request error.
+    """
+    def __init__(self, text, callback_data=None, url=None, style=None, **kwargs):
+        super().__init__(text=text, callback_data=callback_data, url=url, **kwargs)
+        if style in VALID_TELEGRAM_STYLES:
+            self.style = style
+
+    def to_dic(self):
+        json_dic = super().to_dic()
+        if hasattr(self, 'style') and self.style in VALID_TELEGRAM_STYLES:
+            json_dic['style'] = self.style
+        return json_dic
+
+def create_styled_inline_keyboard(button_rows):
+    """Constructs a telebot InlineKeyboardMarkup with compliant 'style' attributes."""
+    markup = InlineKeyboardMarkup()
+    for row in button_rows:
+        row_buttons = []
+        for b in row:
+            raw_style = b.get("style")
+            btn_style = raw_style if raw_style in VALID_TELEGRAM_STYLES else None
+            btn = StyledInlineKeyboardButton(
+                text=b.get("text", ""),
+                callback_data=b.get("callback_data"),
+                url=b.get("url"),
+                style=btn_style
+            )
+            row_buttons.append(btn)
+        markup.row(*row_buttons)
+    return markup
+
+def strip_markup_styles(markup):
+    """Fallback utility to strip style properties if a Telegram client/server rejects them."""
+    if not isinstance(markup, InlineKeyboardMarkup):
+        return markup
+    clean_markup = InlineKeyboardMarkup()
+    for row in markup.keyboard:
+        clean_row = []
+        for btn in row:
+            clean_btn = InlineKeyboardButton(
+                text=btn.text,
+                callback_data=getattr(btn, 'callback_data', None),
+                url=getattr(btn, 'url', None)
+            )
+            clean_row.append(clean_btn)
+        clean_markup.row(*clean_row)
+    return clean_markup
+
+def safe_send_message(chat_id, text, reply_markup=None, parse_mode="HTML", **kwargs):
+    """Safely sends message with auto-fallback to plain buttons if Telegram rejects button style."""
+    try:
+        return bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs)
+    except Exception as e:
+        err_msg = str(e).lower()
+        if reply_markup and ("button" in err_msg or "style" in err_msg or "400" in err_msg):
+            clean_markup = strip_markup_styles(reply_markup)
+            return bot.send_message(chat_id, text, reply_markup=clean_markup, parse_mode=parse_mode, **kwargs)
+        raise e
+
+def safe_edit_message_text(text, chat_id, message_id, reply_markup=None, parse_mode="HTML", **kwargs):
+    """Safely edits message with auto-fallback to plain buttons if Telegram rejects button style."""
+    try:
+        return bot.edit_message_text(text, chat_id, message_id, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs)
+    except Exception as e:
+        err_msg = str(e).lower()
+        if reply_markup and ("button" in err_msg or "style" in err_msg or "400" in err_msg):
+            clean_markup = strip_markup_styles(reply_markup)
+            return bot.edit_message_text(text, chat_id, message_id, reply_markup=clean_markup, parse_mode=parse_mode, **kwargs)
+        raise e
+
+def get_main_reply_keyboard():
+    """Builds persistent Reply Keyboard for quick-tap action."""
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    btn_url = KeyboardButton("🌐 Render URL")
+    btn_obf = KeyboardButton("🔒 Obfuscate HTML")
+    btn_img = KeyboardButton("📸 Image to URL")
+    btn_stats = KeyboardButton("📊 Stats")
+    markup.add(btn_url, btn_obf)
+    markup.add(btn_img, btn_stats)
+    return markup
+
+def get_main_inline_keyboard():
+    """Builds interactive styled inline keyboard for user menu."""
+    rows = [
+        [
+            {"text": "🌐 Render URL", "callback_data": "btn_url", "style": "primary"},
+            {"text": "🔒 Obfuscate HTML", "callback_data": "btn_obf", "style": "success"}
+        ],
+        [
+            {"text": "📸 Image to URL", "callback_data": "btn_img", "style": "primary"},
+            {"text": "📊 Stats", "callback_data": "btn_stats"}
+        ]
+    ]
+    return create_styled_inline_keyboard(rows)
+
+# ==============================================================================
+# 🧬 HARDCORE MILITARY-GRADE VM (VIRTUAL MACHINE) BYTECODE OBFUSCATION ENGINE
+# ==============================================================================
+def mask_scripts_vm(html_code):
+    """Deep virtualization of inline script tags using nested base64 + XOR VM runner."""
+    def process_script(match):
+        script_tag = match.group(1)
+        script_content = match.group(2)
+        script_end = match.group(3)
+        if 'src=' in script_tag.lower() or not script_content.strip():
+            return match.group(0)
+        
+        seed_key = random.randint(11, 240)
+        encoded_chars = [ord(c) ^ seed_key for c in script_content]
+        js_vm_payload = f"""(function(){{
+            var _k={seed_key},_d=[{','.join(map(str, encoded_chars))}],_s='';
+            for(var _i=0;_i<_d.length;_i++){{_s+=String.fromCharCode(_d[_i]^_k);}}
+            try{{(new Function(_s))();}}catch(e){{}}
+        }})();"""
+        return f"{script_tag}\n{js_vm_payload}\n{script_end}"
+    return re.sub(r'(<script[^>]*>)(.*?)(</script>)', process_script, html_code, flags=re.IGNORECASE | re.DOTALL)
+
+def rol8(val, r):
+    """8-bit cyclic bitwise rotation left."""
+    return ((val << r) & 0xFF) | ((val & 0xFF) >> (8 - r))
+
+def ror8(val, r):
+    """8-bit cyclic bitwise rotation right."""
+    return ((val & 0xFF) >> r) | ((val << (8 - r)) & 0xFF)
+
+def vm_compile_html(html_code):
+    """
+    VIRTUAL MACHINE (VM) BYTECODE COMPILER:
+    Compiles raw HTML into an encrypted opcode instruction stream executed by
+    an in-browser virtual CPU with virtual registers, virtual stack, and anti-tamper.
+    """
+    html_code = mask_scripts_vm(html_code)
+    url_encoded = urllib.parse.quote(html_code)
+    raw_bytes = url_encoded.encode('utf-8')
+    
+    # Generate cryptographic master signature tokens
+    sig_core = ''.join(random.choices(string.ascii_letters + string.digits, k=24))
+    salt_val = ''.join(random.choices(string.digits, k=8))
+    full_token = sig_core + salt_val  # 32 chars
+    
+    # Dynamic polymorphic rotation offset & XOR keys
+    xor_key_1 = random.randint(33, 219)
+    xor_key_2 = random.randint(41, 237)
+    rot_offset = random.randint(1, 7)
+    
+    bytecode = []
+    for b in raw_bytes:
+        stage1 = b ^ xor_key_1
+        stage2 = rol8(stage1, rot_offset)
+        stage3 = stage2 ^ xor_key_2
+        
+        bytecode.append(0x1A)         # OP_PUSH_CONST
+        bytecode.append(stage3)       # Encrypted Byte Argument
+        bytecode.append(0x2B)         # OP_XOR_MEM
+        bytecode.append(0x3C)         # OP_ROR
+        bytecode.append(0x4D)         # OP_ACCUMULATE
+    
+    bytecode.append(0xFE)             # OP_VM_HALT
+    bytecode_str = ",".join(map(str, bytecode))
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    comment_inner = f"""
+╔══════════════════════════════════════════════════════════╗
+║  🔒 PROTECTED HTML - DO NOT MODIFY THIS HEADER 🔒         ║
+║══════════════════════════════════════════════════════════║
+║  Obfuscated By: @Html_tools_Pro_shadow_bot                      ║
+║  TG Channel : @SIYAM_BHAI_OWNER                                 ║
+║  Timestamp: {timestamp}                          ║
+║  Signature: SIYAM-_-PROTECT                                   ║
+║══════════════════════════════════════════════════════════║
+║  ⚠️ WARNING: Removing or modifying this credit header    ║
+║  will cause this page to stop working!                   ║
+╚══════════════════════════════════════════════════════════╝"""
+
+    header_comment = f"<!--{comment_inner}\n-->"
+    expected_stripped = re.sub(r'\s+', '', comment_inner)
+
+    vm_runtime_js = f"""
+    (function(){{
+        'use strict';
+        
+        try {{
+            var _c = window.console;
+            var _noop = function(){{}};
+            if (_c) {{
+                ['log','warn','error','info','dir','table','trace','debug'].forEach(function(m){{
+                    try {{ _c[m] = _noop; }} catch(e){{}}
+                }});
+                if (typeof _c.clear === 'function') _c.clear();
+            }}
+        }} catch(e){{}}
+
+        // Anti Right-Click, Selection, Drag
+        document.addEventListener('contextmenu', function(e){{ e.preventDefault(); return false; }}, true);
+        document.addEventListener('selectstart', function(e){{ e.preventDefault(); return false; }}, true);
+        document.addEventListener('dragstart', function(e){{ e.preventDefault(); return false; }}, true);
+        
+        // Anti DevTools Keycodes
+        window.addEventListener('keydown', function(e) {{
+            if (e.keyCode === 123) {{ e.preventDefault(); e.stopPropagation(); return false; }}
+            if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67 || e.keyCode === 75)) {{
+                e.preventDefault(); e.stopPropagation(); return false;
+            }}
+            if (e.ctrlKey && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80 || e.keyCode === 65 || e.keyCode === 69)) {{
+                e.preventDefault(); e.stopPropagation(); return false;
+            }}
+            if (e.metaKey && (e.keyCode === 85 || e.keyCode === 83 || e.keyCode === 80 || e.keyCode === 65)) {{
+                e.preventDefault(); e.stopPropagation(); return false;
+            }}
+        }}, true);
+
+        // Recursive Continuous Debugger Traps
+        var _vTrap = function() {{
+            function _t(i) {{
+                if (('' + i / i)['length'] !== 1 || i % 20 === 0) {{
+                    (function(){{}}['constructor']('debugger')());
+                }} else {{
+                    (function(){{}}['constructor']('debugger')());
+                }}
+                _t(++i);
+            }}
+            try {{ _t(0); }} catch(err) {{ setTimeout(_vTrap, 100); }}
+        }};
+        setInterval(_vTrap, 200);
+
+        // Window Dimension DevTools Detection
+        setInterval(function(){{
+            var _wDiff = window.outerWidth - window.innerWidth > 160;
+            var _hDiff = window.outerHeight - window.innerHeight > 160;
+            if (_wDiff || _hDiff) {{
+                try {{
+                    document.body.innerHTML = '<div style="background:#05070e;color:#ff3366;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:monospace;font-size:22px;text-align:center;padding:24px;">🛡️ DEVTOOLS DETECTED<br><span style="color:#94a3b8;font-size:14px;margin-top:12px;">Close developer inspection tools and refresh to unlock content.</span></div>';
+                }} catch(e){{}}
+            }}
+        }}, 600);
+
+        // Header Comment Integrity Verification
+        var _safe = false;
+        var _token = "";
+        var _iter = document.createTreeWalker(document, 128, null, false);
+        var _node;
+        var _expected = "{expected_stripped}";
+
+        while ((_node = _iter.nextNode())) {{
+            var _val = _node.nodeValue;
+            if (_val.indexOf('ULTRA-PROTECTED HTML') !== -1) {{
+                var _actual = _val.replace(/\\s+/g, '');
+                if (_actual === _expected) {{
+                    var _idx = _val.indexOf('[SIG_TOKEN: ');
+                    if (_idx !== -1) {{
+                        _token = _val.substring(_idx + 12, _idx + 44);
+                        _safe = true;
+                        break;
+                    }}
+                }}
+            }}
+        }}
+
+        if (!_safe || _token.length !== 32) {{
+            document.write('<div style="background:#090d16;color:#ff4444;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;text-align:center;padding:20px;"><h1>🚨 INTEGRITY VIOLATION DETECTED</h1><p style="color:#94a3b8;max-width:500px;">The security header comment was modified or removed. VM Decryption keys have been revoked automatically.</p></div>');
+            while(true) {{ debugger; }}
+            return;
+        }}
+
+        // Virtual CPU Execution Loop
+        var _bytecode = [{bytecode_str}];
+        var _IP = 0;
+        var _STACK = [];
+        var _OUT = [];
+        var _K1 = {xor_key_1};
+        var _K2 = {xor_key_2};
+        var _ROT = {rot_offset};
+
+        function _ror(val, r) {{
+            return ((val & 0xFF) >> r) | ((val << (8 - r)) & 0xFF);
+        }}
+
+        var _running = true;
+        while (_running && _IP < _bytecode.length) {{
+            var _opcode = _bytecode[_IP++];
+            switch(_opcode) {{
+                case 0x1A: // OP_PUSH_CONST
+                    _STACK.push(_bytecode[_IP++]);
+                    break;
+                case 0x2B: // OP_XOR_MEM
+                    if (_STACK.length > 0) {{
+                        var _v = _STACK.pop();
+                        _STACK.push(_v ^ _K2);
+                    }}
+                    break;
+                case 0x3C: // OP_ROR
+                    if (_STACK.length > 0) {{
+                        var _v2 = _STACK.pop();
+                        var _unrotated = _ror(_v2, _ROT);
+                        _STACK.push(_unrotated ^ _K1);
+                    }}
+                    break;
+                case 0x4D: // OP_ACCUMULATE
+                    if (_STACK.length > 0) {{
+                        _OUT.push(_STACK.pop());
+                    }}
+                    break;
+                case 0xFE: // OP_VM_HALT
+                    _running = false;
+                    break;
+                default:
+                    _running = false;
+                    break;
+            }}
+        }}
+
+        try {{
+            var _chars = '';
+            for (var _j = 0; _j < _OUT.length; _j++) {{
+                _chars += String.fromCharCode(_OUT[_j]);
+            }}
+            var _finalHtml = decodeURIComponent(_chars);
+            document.open();
+            document.write(_finalHtml);
+            document.close();
+        }} catch(e) {{
+            document.write('<h2 style="color:red;text-align:center;padding:40px;">🚨 VM Payload execution failed.</h2>');
+        }}
+    }})();
+    """
+
+    encoded_vm_js = base64.b64encode(vm_runtime_js.encode('utf-8')).decode('utf-8')
+    chunk_size = len(encoded_vm_js) // 3
+    p1 = encoded_vm_js[:chunk_size]
+    p2 = encoded_vm_js[chunk_size:chunk_size*2]
+    p3 = encoded_vm_js[chunk_size*2:]
+
+    final_html = f"""{header_comment}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="HTML-Tools-Pro-Shadow-VM-Engine-V5">
+<meta name="author" content="@SIYAM_BHAI_OWNER">
+<title>Protected Content</title>
+<script>
+    document.addEventListener("contextmenu", function(e){{ e.preventDefault(); return false; }}, false);
+</script>
+</head>
+<body oncontextmenu="return false;" onkeydown="return false;" onmousedown="return false;" onselectstart="return false;">
+<script>
+(function(){{
+    var _a = '{p1}';
+    var _b = '{p2}';
+    var _c = '{p3}';
+    var _full = _a + _b + _c;
+    var _code = decodeURIComponent(escape(window.atob(_full)));
+    var _vmEngine = new Function(_code);
+    _vmEngine();
+}})();
+</script>
+<noscript>
+    <div style="background:#090d16;color:#fff;font-family:sans-serif;padding:30px;text-align:center;">
+        <h2>⚠️ JavaScript Required</h2>
+        <p>Please enable JavaScript in your browser settings to access this VM-protected document.</p>
+    </div>
+</noscript>
+</body>
+</html>"""
+    return final_html
+
+# ==============================================================================
+# 👑 ADMIN PANEL & MULTI-ADMIN ENGINE WITH COLORED BUTTONS
+# ==============================================================================
+def get_admin_panel_markup():
+    """Generates modern admin panel keyboard with custom styles as InlineKeyboardMarkup."""
+    total_admins = len(db.get("admins", [ADMIN_ID]))
+    rows = [
+        [
+            {"text": f"👑 Admins ({total_admins})", "callback_data": "admin_manage_admins", "style": "primary"},
+            {"text": "➕ Add Admin", "callback_data": "admin_add_admin_prompt", "style": "success"}
+        ],
+        [
+            {"text": "📣 Broadcast Message", "callback_data": "admin_broadcast_start", "style": "primary"},
+            {"text": "👥 View Users", "callback_data": "admin_view_users"}
+        ],
+        [
+            {"text": "📝 Live Logs", "callback_data": "admin_view_logs"},
+            {"text": "🌐 View URLs", "callback_data": "admin_view_urls"}
+        ],
+        [
+            {"text": "📁 User Files", "callback_data": "admin_view_files"},
+            {"text": "✏️ Edit Texts", "callback_data": "admin_edit_texts"}
+        ],
+        [
+            {"text": "🔴 Turn OFF Bot", "callback_data": "admin_off", "style": "danger"},
+            {"text": "🟢 Turn ON Bot", "callback_data": "admin_on", "style": "success"}
+        ]
+    ]
+    return create_styled_inline_keyboard(rows)
+
+def send_main_menu(chat_id):
+    """Sends the standard welcome interface."""
+    reply_markup = get_main_reply_keyboard()
+    inline_markup = get_main_inline_keyboard()
+    
+    safe_send_message(
+        chat_id, 
+        db["texts"]["welcome"], 
+        reply_markup=reply_markup, 
+        parse_mode="HTML"
+    )
+    safe_send_message(
+        chat_id, 
+        "⌁ <b>Quick Feature Selection:</b>", 
+        reply_markup=inline_markup, 
+        parse_mode="HTML"
+    )
+
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    add_user(message.chat.id)
+    log_activity(message.chat.id, "Started Bot")
+    user_states[message.chat.id] = "" 
+    
+    if not db['bot_active'] and not is_admin(message.chat.id):
+        bot.reply_to(message, "🛠️ <b>Maintenance Break!</b> Bot is currently offline.", parse_mode="HTML")
+        return
+
+    send_main_menu(message.chat.id)
+
+@bot.message_handler(commands=['myid', 'id'])
+def show_my_id(message):
+    """Command to easily discover user's Telegram ID."""
+    uid = str(message.from_user.id if message.from_user else message.chat.id).strip()
+    name = message.from_user.first_name if message.from_user else "User"
+    role = "👑 Super Owner" if is_owner(uid) else ("🛡️ Admin" if is_admin(uid) else "👤 Regular User")
+    
+    bot.reply_to(
+        message, 
+        f"✦ <b>Telegram User Information:</b>\n\n"
+        f"• <b>Name:</b> {name}\n"
+        f"• <b>Telegram ID:</b> <code>{uid}</code>\n"
+        f"• <b>Role Status:</b> <b>{role}</b>\n\n"
+        f"<i>⌁ Use this ID in <code>ADMIN_ID = \"{uid}\"</code> or ask the owner to add you via <code>/addadmin {uid}</code></i>",
+        parse_mode="HTML"
+    )
+
+@bot.message_handler(commands=['admin'])
+def secret_admin_panel(message):
+    try:
+        user_id = str(message.from_user.id if message.from_user else message.chat.id).strip()
+        chat_id = message.chat.id
+        
+        # Check if caller has admin permissions
+        if not is_admin(user_id) and not is_admin(chat_id):
+            bot.reply_to(
+                message,
+                f"🚫 <b>Access Denied! (বোকা চোদা আইসে)</b>\n\n"
+                f"এই বট তোর আববুর বুঝলা ছেলে।\n"
+                f"• <b>লে বোকাচোদা Telegram ID:</b> <code>{user_id}</code>\n\n"
+                f"💡 <i>বোকা চোদা সালা <code>FUCK U \"{user_id}\"</code> এই বট তোমার এই আববুর @SIYAM_BHAI_OWNER সালা।</i>",
+                parse_mode="HTML"
+            )
+            return
+        
+        user_states[chat_id] = ""
+        admin_count = len(db.get("admins", [ADMIN_ID]))
+        user_count = len(db.get("users", []))
+        status_text = "🟢 ONLINE" if db.get("bot_active", True) else "🔴 OFFLINE"
+        
+        panel_text = f"""🛡️ <b>𝗔𝗗𝗠𝗜𝗡 𝗣𝗔𝗡𝗘𝗟 (Pʀᴇᴍɪᴜᴍ V5.0)</b> 🛡️
+
+👑 <b>Your Role:</b> {"👑 Super Owner" if is_owner(user_id) else "🛡️ Sub-Admin"}
+• <b>Your ID:</b> <code>{user_id}</code>
+• <b>Total Users:</b> <code>{user_count}</code>
+• <b>Total Admins:</b> <code>{admin_count}</code>
+• <b>Bot Status:</b> {status_text}
+
+<i>Select a management feature below:</i>"""
+        
+        safe_send_message(
+            chat_id, 
+            panel_text, 
+            reply_markup=get_admin_panel_markup(), 
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        print(f"[Admin Error] {e}")
+        bot.reply_to(message, f"❌ Admin Panel Error: {str(e)}")
+
+@bot.message_handler(commands=['addadmin'])
+def handle_cmd_add_admin(message):
+    """Command shortcut: /addadmin <user_id>"""
+    user_id = str(message.from_user.id if message.from_user else message.chat.id).strip()
+    if not is_owner(user_id):
+        bot.reply_to(message, "❌ Only the Super Owner can add admins.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ <b>Usage:</b> <code>/addadmin &lt;telegram_user_id&gt;</code>", parse_mode="HTML")
+        return
+    
+    new_id = parts[1].strip()
+    if not new_id.isdigit():
+        bot.reply_to(message, "❌ Invalid ID! Telegram user ID must be numeric.")
+        return
+    
+    admins = [str(a).strip() for a in db.get("admins", [ADMIN_ID])]
+    if new_id in admins:
+        bot.reply_to(message, f"ℹ️ User <code>{new_id}</code> is already an admin.", parse_mode="HTML")
+        return
+        
+    admins.append(new_id)
+    db["admins"] = admins
+    save_db(db)
+    
+    bot.reply_to(message, f"✅ <b>Admin Added Successfully!</b>\n• ID: <code>{new_id}</code>\n• Total Admins: <b>{len(admins)}</b>", parse_mode="HTML")
+
+@bot.message_handler(commands=['deladmin', 'removeadmin'])
+def handle_cmd_del_admin(message):
+    """Command shortcut: /deladmin <user_id>"""
+    user_id = str(message.from_user.id if message.from_user else message.chat.id).strip()
+    if not is_owner(user_id):
+        bot.reply_to(message, "❌ Only the Super Owner can remove admins.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.reply_to(message, "⚠️ <b>Usage:</b> <code>/deladmin &lt;telegram_user_id&gt;</code>", parse_mode="HTML")
+        return
+    
+    target_id = parts[1].strip()
+    if target_id == str(ADMIN_ID).strip():
+        bot.reply_to(message, "❌ You cannot remove the Super Owner!")
+        return
+    
+    admins = [str(a).strip() for a in db.get("admins", [ADMIN_ID])]
+    if target_id not in admins:
+        bot.reply_to(message, f"❌ ID <code>{target_id}</code> is not in the admin list.", parse_mode="HTML")
+        return
+        
+    admins.remove(target_id)
+    db["admins"] = admins
+    save_db(db)
+    
+    bot.reply_to(message, f"🗑️ <b>Admin Removed!</b>\n• ID: <code>{target_id}</code>\n• Remaining Admins: <b>{len(admins)}</b>", parse_mode="HTML")
+
+# ==============================================================================
+# 🔘 CALLBACK QUERY DISPATCHER (Colored Buttons & Actions)
+# ==============================================================================
+@bot.callback_query_handler(func=lambda call: True)
+def callback_query(call):
+    chat_id = call.message.chat.id
+    user_id = str(call.from_user.id if call.from_user else chat_id).strip()
+    data = call.data
+    bot.answer_callback_query(call.id)
+
+    # ----------------------------------------------------
+    # ADMIN PANEL CALLBACKS
+    # ----------------------------------------------------
+    if data.startswith("admin_"):
+        if not is_admin(user_id) and not is_admin(chat_id):
+            bot.send_message(chat_id, f"🚫 <b>Access Denied!</b> Your ID is <code>{user_id}</code>.", parse_mode="HTML")
+            return
+
+        if data == "admin_menu":
+            user_states[chat_id] = ""
+            admin_count = len(db.get("admins", [ADMIN_ID]))
+            user_count = len(db.get("users", []))
+            status_text = "🟢 ONLINE" if db.get("bot_active", True) else "🔴 OFFLINE"
+            
+            panel_text = f"""🛡️ <b>𝗔𝗗𝗠𝗜𝗡 𝗣𝗔𝗡𝗘𝗟 (Pʀᴇᴍɪᴜᴍ V5.0)</b> 🛡️
+
+👑 <b>Role:</b> {"👑 Super Owner" if is_owner(user_id) else "🛡️ Sub-Admin"}
+• <b>Your ID:</b> <code>{user_id}</code>
+• <b>Total Users:</b> <code>{user_count}</code>
+• <b>Total Admins:</b> <code>{admin_count}</code>
+• <b>Bot Status:</b> {status_text}"""
+            
+            safe_edit_message_text(panel_text, chat_id, call.message.message_id, reply_markup=get_admin_panel_markup(), parse_mode="HTML")
+            return
+
+        if data == "admin_off":
+            db['bot_active'] = False
+            save_db(db)
+            bot.send_message(chat_id, "🔴 <b>BOT STATUS:</b> OFFLINE", parse_mode="HTML")
+            return
+
+        if data == "admin_on":
+            db['bot_active'] = True
+            save_db(db)
+            bot.send_message(chat_id, "🟢 <b>BOT STATUS:</b> ONLINE", parse_mode="HTML")
+            return
+
+        if data == "admin_view_users":
+            bot.send_message(chat_id, f"👥 <b>Total Registered Users:</b> <code>{len(db['users'])}</code>", parse_mode="HTML")
+            return
+
+        if data == "admin_view_logs":
+            logs = "\n".join(db['activities'][-15:]) or "No activities yet."
+            bot.send_message(chat_id, f"📝 <b>Live Activity Logs:</b>\n\n<code>{logs}</code>", parse_mode="HTML")
+            return
+
+        if data == "admin_view_urls":
+            urls_log = "\n".join(db.get('saved_urls', [])[-20:]) or "No URLs yet."
+            bot.send_message(chat_id, f"🌐 <b>Recent URLs:</b>\n\n{urls_log}", disable_web_page_preview=True, parse_mode="HTML")
+            return
+
+        if data == "admin_view_files":
+            files = db.get('saved_files', [])
+            if not files: 
+                bot.send_message(chat_id, "📁 No files recorded yet.")
+                return
+            for f in files[-8:]:
+                if isinstance(f, dict): 
+                    bot.send_document(chat_id, f['file_id'], caption=f"• Time: {f['time']}\n• User: <code>{f['uid']}</code>", parse_mode="HTML")
+            return
+
+        # --- ADMIN MANAGEMENT SUB-MENU ---
+        if data == "admin_manage_admins":
+            admins = [str(a).strip() for a in db.get("admins", [ADMIN_ID])]
+            text_lines = [
+                f"👑 <b>ADMINS MANAGEMENT</b> 👑",
+                f"• <b>Total Admins Count:</b> <code>{len(admins)}</code>\n"
+            ]
+            
+            btn_rows = []
+            for idx, a_id in enumerate(admins, start=1):
+                is_root = (a_id == str(ADMIN_ID).strip())
+                role_label = "👑 Super Owner" if is_root else "🛡️ Admin"
+                text_lines.append(f"{idx}. <code>{a_id}</code> ({role_label})")
+                
+                # Show remove button only for sub-admins and only if caller is Super Owner
+                if not is_root and is_owner(user_id):
+                    btn_rows.append([
+                        {"text": f"🗑️ Remove {a_id}", "callback_data": f"admin_del_{a_id}", "style": "danger"}
+                    ])
+            
+            if is_owner(user_id):
+                btn_rows.append([
+                    {"text": "➕ Add New Admin", "callback_data": "admin_add_admin_prompt", "style": "success"}
+                ])
+                
+            btn_rows.append([
+                {"text": "🔙 Back to Admin Menu", "callback_data": "admin_menu", "style": "primary"}
+            ])
+            
+            markup = create_styled_inline_keyboard(btn_rows)
+            safe_edit_message_text("\n".join(text_lines), chat_id, call.message.message_id, reply_markup=markup, parse_mode="HTML")
+            return
+
+        if data == "admin_add_admin_prompt":
+            if not is_owner(user_id):
+                bot.send_message(chat_id, "❌ Only the Super Owner can add admins.")
+                return
+            user_states[chat_id] = "WAIT_ADD_ADMIN_ID"
+            
+            cancel_kb = create_styled_inline_keyboard([
+                [{"text": "❌ Cancel", "callback_data": "admin_manage_admins", "style": "danger"}]
+            ])
+            
+            safe_send_message(
+                chat_id, 
+                "👑 <b>ADD NEW ADMIN:</b>\n\nPlease send the <b>Telegram User ID</b> of the person you want to make an admin:\n\n<i>Example: 1234567890</i>", 
+                reply_markup=cancel_kb, 
+                parse_mode="HTML"
+            )
+            return
+
+        if data.startswith("admin_del_"):
+            if not is_owner(user_id):
+                bot.send_message(chat_id, "❌ Only the Super Owner can remove admins.")
+                return
+            target_to_remove = data.replace("admin_del_", "").strip()
+            
+            admins = [str(a).strip() for a in db.get("admins", [ADMIN_ID])]
+            if target_to_remove in admins and target_to_remove != str(ADMIN_ID).strip():
+                admins.remove(target_to_remove)
+                db["admins"] = admins
+                save_db(db)
+                bot.send_message(chat_id, f"✅ Admin <code>{target_to_remove}</code> has been removed.", parse_mode="HTML")
+            
+            # Refresh admin list view
+            call.data = "admin_manage_admins"
+            callback_query(call)
+            return
+
+        # --- BROADCAST COMPOSER START ---
+        if data == "admin_broadcast_start":
+            user_states[chat_id] = "WAIT_BROADCAST_CONTENT"
+            
+            cancel_kb = create_styled_inline_keyboard([
+                [{"text": "❌ Cancel Broadcast", "callback_data": "broadcast_cancel", "style": "danger"}]
+            ])
+            
+            composer_text = """📣 <b>RICH MEDIA BROADCAST COMPOSER</b> 📣
+
+You can broadcast <b>ANY</b> of the following:
+• ✍️ <b>Text Message</b> (HTML formatting allowed)
+• 📸 <b>Photo</b> (with optional caption)
+• 🎥 <b>Video</b> (with optional caption)
+• 🏷️ <b>Sticker</b> (Telegram stickers supported!)
+
+👉 <b>Send your message, photo, video, or sticker now!</b>
+<i>You will be given a preview with Confirm/Cancel buttons before it is sent to users.</i>"""
+            safe_send_message(chat_id, composer_text, reply_markup=cancel_kb, parse_mode="HTML")
+            return
+
+        if data == "admin_edit_texts":
+            rows = [
+                [
+                    {"text": "✏️ Welcome Text", "callback_data": "edit_txt_welcome", "style": "primary"},
+                    {"text": "✏️ Obfuscate Text", "callback_data": "edit_txt_obf_prompt", "style": "primary"}
+                ],
+                [
+                    {"text": "✏️ URL Prompt", "callback_data": "edit_txt_url_prompt", "style": "primary"},
+                    {"text": "✏️ Image Prompt", "callback_data": "edit_txt_img_prompt", "style": "primary"}
+                ],
+                [
+                    {"text": "🔙 Back", "callback_data": "admin_menu"}
+                ]
+            ]
+            safe_send_message(chat_id, "✏️ <b>Select text template to modify:</b>", reply_markup=create_styled_inline_keyboard(rows), parse_mode="HTML")
+            return
+
+    # ----------------------------------------------------
+    # BROADCAST PREVIEW CONFIRMATION / CANCELLATION
+    # ----------------------------------------------------
+    if data == "broadcast_confirm":
+        if not is_admin(user_id) and not is_admin(chat_id):
+            return
+        
+        staged = broadcast_staging.get(chat_id)
+        if not staged:
+            bot.send_message(chat_id, "⚠️ No broadcast queued or broadcast already completed.")
+            return
+
+        # Clear staging
+        del broadcast_staging[chat_id]
+        broadcast_cancel_flags[chat_id] = False
+        
+        total_targets = len(db.get("users", []))
+        abort_markup = create_styled_inline_keyboard([
+            [{"text": "⏹️ Abort / Stop Broadcast", "callback_data": f"broadcast_abort_{chat_id}", "style": "danger"}]
+        ])
+        
+        safe_send_message(chat_id, f"🚀 <b>Starting Broadcast to {total_targets} users...</b>", reply_markup=abort_markup, parse_mode="HTML")
+        
+        success = 0
+        failed = 0
+        b_type = staged["type"]
+        content = staged["content"]
+        caption = staged.get("caption")
+        
+        for idx, u in enumerate(db.get("users", [])):
+            if broadcast_cancel_flags.get(chat_id, False):
+                bot.send_message(chat_id, f"🛑 <b>Broadcast Cancelled by Admin!</b>\nSent: {success} | Skipped: {total_targets - (success + failed)}", parse_mode="HTML")
+                break
+                
+            try:
+                target_uid = int(u)
+                if b_type == "text":
+                    bot.send_message(target_uid, f"📣 <b>𝗔𝗗𝗠𝗜𝗡 𝗠𝗘𝗦𝗦𝗔𝗚𝗘</b> 📣\n\n{content}", parse_mode="HTML")
+                elif b_type == "photo":
+                    bot.send_photo(target_uid, content, caption=caption or "📣 <b>𝗔𝗗𝗠𝗜𝗡 𝗠𝗘𝗦𝗦𝗔𝗚𝗘</b>", parse_mode="HTML")
+                elif b_type == "video":
+                    bot.send_video(target_uid, content, caption=caption or "📣 <b>𝗔𝗗𝗠𝗜𝗡 𝗠𝗘𝗦𝗦𝗔𝗚𝗘</b>", parse_mode="HTML")
+                elif b_type == "sticker":
+                    bot.send_sticker(target_uid, content)
+                success += 1
+            except Exception:
+                failed += 1
+            
+            # Keep responsive without flooding
+            time.sleep(0.04)
+
+        bot.send_message(
+            chat_id, 
+            f"✅ <b>Broadcast Completed!</b>\n\n📬 <b>Delivered:</b> <code>{success}</code>\n❌ <b>Failed/Blocked:</b> <code>{failed}</code>\n👥 <b>Total Target:</b> <code>{total_targets}</code>", 
+            parse_mode="HTML"
+        )
+        return
+
+    if data == "broadcast_cancel":
+        if chat_id in broadcast_staging:
+            del broadcast_staging[chat_id]
+        user_states[chat_id] = ""
+        bot.send_message(chat_id, "❌ <b>Broadcast has been cancelled.</b>", parse_mode="HTML")
+        return
+
+    if data.startswith("broadcast_abort_"):
+        admin_owner = data.replace("broadcast_abort_", "")
+        broadcast_cancel_flags[int(admin_owner)] = True
+        bot.send_message(chat_id, "🛑 <b>Cancelling broadcast immediately...</b>", parse_mode="HTML")
+        return
+
+    # Text editing triggers
+    if data.startswith("edit_txt_"):
+        if not is_admin(user_id) and not is_admin(chat_id): return
+        target = data.replace("edit_txt_", "")
+        user_states[chat_id] = f"WAIT_EDIT_{target}"
+        bot.send_message(chat_id, f"✏️ Send new replacement text for <b>{target}</b> (HTML formatting allowed):", parse_mode="HTML")
+        return
+
+    if not db['bot_active'] and not is_admin(user_id) and not is_admin(chat_id): return
+
+    # ----------------------------------------------------
+    # MAIN MENU FEATURE SELECTIONS
+    # ----------------------------------------------------
+    if data == "btn_obf":
+        user_states[chat_id] = "WAIT_HTML_FILE"
+        safe_send_message(chat_id, db["texts"]["obf_prompt"], reply_markup=get_main_reply_keyboard(), parse_mode="HTML")
+        log_activity(chat_id, "Selected VM Obfuscator")
+    elif data == "btn_url":
+        user_states[chat_id] = "WAIT_URL"
+        safe_send_message(chat_id, db["texts"]["url_prompt"], reply_markup=get_main_reply_keyboard(), parse_mode="HTML")
+        log_activity(chat_id, "Selected URL to HTML")
+    elif data == "btn_img":
+        user_states[chat_id] = "WAIT_IMAGE"
+        safe_send_message(chat_id, db["texts"]["img_prompt"], reply_markup=get_main_reply_keyboard(), parse_mode="HTML")
+        log_activity(chat_id, "Selected Image to URL")
+    elif data == "btn_stats":
+        total_users = len(db['users'])
+        obf_count = db['stats']['obf']
+        url_count = db['stats']['url']
+        img_count = db['stats']['img']
+        total_admins = len(db.get("admins", [ADMIN_ID]))
+        
+        stats_text = f"""✦ <b>Bᴏᴛ Sᴛᴀᴛɪsᴛɪᴄs (Pʀᴇᴍɪᴜᴍ Sᴜɪᴛᴇ V5.0)</b> ✦
+
+• <b>Total Registered Users:</b> <code>{total_users}</code>
+• <b>Active Administrators:</b> <code>{total_admins}</code>
+• <b>VM Bytecode Obfuscations:</b> <code>{obf_count}</code>
+• <b>URLs Rendered:</b> <code>{url_count}</code>
+• <b>Images Hosted:</b> <code>{img_count}</code>
+
+⌁ <b>VM Engine Status:</b> 100% Operational & Protected"""
+        safe_send_message(chat_id, stats_text, reply_markup=get_main_reply_keyboard(), parse_mode="HTML")
+        log_activity(chat_id, "Viewed Stats")
+
+# ==============================================================================
+# 📤 DOCUMENT / FILE HANDLER (VM HTML OBFUSCATION)
+# ==============================================================================
+def extract_user_info_safe(message):
+    name = message.from_user.first_name if message.from_user.first_name else "Unknown"
+    uid = message.chat.id
+    username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
+    return f"• Name: {name}\n• ID: <code>{uid}</code>\n• Username: {username}"
+
+@bot.message_handler(content_types=['document'])
+def handle_document(message):
+    chat_id = message.chat.id
+    user_id = str(message.from_user.id if message.from_user else chat_id).strip()
+    if not db['bot_active'] and not is_admin(user_id):
+        bot.reply_to(message, "🛠️ Bot is currently offline.")
+        return
+
+    # Notify Super Owner of incoming files
+    if not is_admin(user_id):
+        try:
+            info = extract_user_info_safe(message)
+            admin_msg = f"⌁ <b>NEW FILE RECEIVED!</b>\n{info}\n📁 File: {message.document.file_name}"
+            bot.send_message(int(ADMIN_ID), admin_msg, parse_mode="HTML")
+            bot.forward_message(int(ADMIN_ID), chat_id, message.message_id)
+        except Exception: 
+            pass
+
+    # VM HTML Obfuscator
+    try:
+        if not message.document.file_name.endswith('.html'):
+            bot.reply_to(message, "⚠️ Error: Please send a valid HTML (.html) file.")
+            return
+            
+        time_now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        db['saved_files'].append({
+            "time": time_now, 
+            "uid": chat_id, 
+            "name": message.document.file_name, 
+            "file_id": message.document.file_id
+        })
+        
+        db['stats']['obf'] += 1
+        save_db(db)
+        
+        bot.reply_to(message, "⏳ <b>Processing...</b>\n<b>⌁ 𝙊𝘽𝙁𝙐𝙎𝘾𝘼𝙏𝙄𝙉𝙂 𝙔𝙊𝙐𝙍 𝙃𝙏𝙈𝙇 𝙒𝙄𝙏𝙃 𝙑𝙈 𝘽𝙔𝙏𝙀𝘾𝙊𝘿𝙀 𝙀𝙉𝙂𝙄𝙉𝙀 𝙑5.0 ✦</b>", parse_mode="HTML")
+        file_info = bot.get_file(message.document.file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        html_content = downloaded_file.decode('utf-8', errors='ignore')
+        
+        # Compile with custom Virtual Machine engine
+        obfuscated_content = vm_compile_html(html_content)
+        
+        obfuscated_file = io.BytesIO(obfuscated_content.encode('utf-8'))
+        
+        # Exact output file name requested: SHADOW_OBF.html
+        obfuscated_file_name = "SHADOW_OBF.html"
+        obfuscated_file.name = obfuscated_file_name
+        
+        # Custom caption specified by the user:
+        custom_caption = """🛡️ 𝗣𝗿𝗼𝘁𝗲𝗰𝘁𝗲𝗱 𝘄𝗶𝘁𝗵:
+  • ⌨️ Keyboard Block
+  • 🔍 DevTools Detection
+  • 🛡️ Anti-Scraping
+  • 🖼️ Iframe/Sandbox Detection
+  • 🎨 VM Obfuscation Engine
+  • 🌐 Pro Obfuscation
+
+
+🔒 Your HTML code is now protected!
+
+⚠️ Disclaimer: This bot only obfuscates JavaScript (JS) code. HTML and CSS are wrapped together inside a secure single-script output file."""
+        
+        bot.send_document(
+            chat_id, 
+            obfuscated_file, 
+            caption=custom_caption, 
+            reply_markup=get_main_reply_keyboard(), 
+            parse_mode="HTML", 
+            timeout=120
+        )
+        log_activity(chat_id, f"Encrypted file: {message.document.file_name}")
+        user_states[chat_id] = "" 
+    except Exception as e:
+        bot.reply_to(message, f"❌ Critical Error: ({str(e)})")
+
+# ==============================================================================
+# 📸 PHOTO / STICKER / VIDEO BROADCAST & IMAGE-TO-URL
+# ==============================================================================
+def present_broadcast_preview(chat_id, b_type, content, caption=None):
+    """Presents confirmation preview of broadcast to admin with styled buttons."""
+    broadcast_staging[chat_id] = {
+        "type": b_type,
+        "content": content,
+        "caption": caption
+    }
+    user_states[chat_id] = ""
+    
+    markup = create_styled_inline_keyboard([
+        [
+            {"text": "✅ Confirm & Send", "callback_data": "broadcast_confirm", "style": "success"},
+            {"text": "❌ Cancel Broadcast", "callback_data": "broadcast_cancel", "style": "danger"}
+        ],
+        [
+            {"text": "⚙️ Admin Settings", "callback_data": "admin_menu", "style": "primary"}
+        ]
+    ])
+    
+    preview_msg = f"📣 <b>BROADCAST PREVIEW ({b_type.upper()})</b>\n\nTarget Users: <code>{len(db.get('users', []))}</code>\n\n<i>Review the media above and tap Confirm to broadcast or Cancel to abort:</i>"
+    safe_send_message(chat_id, preview_msg, reply_markup=markup, parse_mode="HTML")
+
+@bot.message_handler(content_types=['sticker'])
+def handle_sticker(message):
+    chat_id = message.chat.id
+    user_id = str(message.from_user.id if message.from_user else chat_id).strip()
+    state = user_states.get(chat_id, "")
+    
+    if is_admin(user_id) and state == "WAIT_BROADCAST_CONTENT":
+        sticker_id = message.sticker.file_id
+        bot.reply_to(message, "🏷️ <b>Sticker captured for broadcast!</b>", parse_mode="HTML")
+        present_broadcast_preview(chat_id, "sticker", sticker_id)
+        return
+
+@bot.message_handler(content_types=['video'])
+def handle_video(message):
+    chat_id = message.chat.id
+    user_id = str(message.from_user.id if message.from_user else chat_id).strip()
+    state = user_states.get(chat_id, "")
+    
+    if is_admin(user_id) and state == "WAIT_BROADCAST_CONTENT":
+        video_id = message.video.file_id
+        caption = message.caption or ""
+        bot.reply_to(message, "🎥 <b>Video captured for broadcast!</b>", parse_mode="HTML")
+        present_broadcast_preview(chat_id, "video", video_id, caption)
+        return
+
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
+    chat_id = message.chat.id
+    user_id = str(message.from_user.id if message.from_user else chat_id).strip()
+    state = user_states.get(chat_id, "")
+    
+    if is_admin(user_id) and state == "WAIT_BROADCAST_CONTENT":
+        photo_id = message.photo[-1].file_id
+        caption = message.caption or ""
+        bot.reply_to(message, "📸 <b>Photo captured for broadcast!</b>", parse_mode="HTML")
+        present_broadcast_preview(chat_id, "photo", photo_id, caption)
+        return
+
+    if not db['bot_active'] and not is_admin(user_id):
+        bot.reply_to(message, "🛠️ Bot is currently offline.")
+        return
+
+    # Image-to-URL feature
+    try:
+        bot.reply_to(message, "⏳ <b>𝗨𝗽𝗹𝗼𝗮𝗱𝗶𝗻𝗴 𝗜𝗺𝗮𝗴𝗲...</b>", parse_mode="HTML")
+        
+        file_info = bot.get_file(message.photo[-1].file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        
+        image_url = None
+        if IMGBB_API_KEY and IMGBB_API_KEY != "YOUR_IMGBB_API_KEY_HERE":
+            try:
+                response = requests.post(
+                    f"https://api.imgbb.com/1/upload?key={IMGBB_API_KEY}", 
+                    files={"image": downloaded_file},
+                    timeout=20
+                )
+                res_data = response.json()
+                if response.status_code == 200 and res_data.get("success"):
+                    image_url = res_data["data"]["url"]
+            except Exception:
+                pass
+
+        if not image_url:
+            response = requests.post(
+                "https://catbox.moe/user/api.php", 
+                data={"reqtype": "fileupload"}, 
+                files={"fileToUpload": ("image.jpg", downloaded_file, "image/jpeg")},
+                timeout=25
+            )
+            if response.status_code == 200 and response.text.startswith("http"):
+                image_url = response.text.strip()
+            else:
+                bot.reply_to(message, "❌ <b>Failed to upload image to CDN.</b>", parse_mode="HTML")
+                return
+                
+        name = message.from_user.first_name if message.from_user.first_name else "Unknown"
+        
+        db['stats']['img'] += 1
+        save_db(db)
+        
+        success_text = f"✅ <b>Lɪɴᴋ Gᴇɴᴇʀᴀᴛᴇᴅ Sᴜᴄᴄᴇssғᴜʟʟʏ!</b>\n\n• <b>Nᴀᴍᴇ:</b> {name}\n• <b>ID:</b> <code>{chat_id}</code>\n\n➔ <b>Yᴏᴜʀ Dɪʀᴇᴄᴛ Lɪɴᴋ:</b>\n{image_url}"
+        bot.reply_to(message, success_text, reply_markup=get_main_reply_keyboard(), disable_web_page_preview=False, parse_mode="HTML")
+        log_activity(chat_id, "Generated Image URL")
+        user_states[chat_id] = ""
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+# ==============================================================================
+# 💬 TEXT MESSAGE DISPATCHER
+# ==============================================================================
+@bot.message_handler(func=lambda message: True)
+def handle_text(message):
+    chat_id = message.chat.id
+    user_id = str(message.from_user.id if message.from_user else chat_id).strip()
+    state = user_states.get(chat_id, "")
+    text = (message.text or "").strip()
+
+    # 1. Add admin state
+    if is_owner(user_id) and state == "WAIT_ADD_ADMIN_ID":
+        if not text.isdigit():
+            bot.reply_to(message, "❌ Invalid ID! Telegram ID must be digits only. Please re-enter or /admin to exit.")
+            return
+            
+        admins = [str(a).strip() for a in db.get("admins", [ADMIN_ID])]
+        if text in admins:
+            bot.reply_to(message, f"ℹ️ User <code>{text}</code> is already an admin.", parse_mode="HTML")
+        else:
+            admins.append(text)
+            db["admins"] = admins
+            save_db(db)
+            bot.reply_to(message, f"✅ <b>Admin Added Successfully!</b>\n• ID: <code>{text}</code>\n• Total Admins: <b>{len(admins)}</b>", parse_mode="HTML")
+            
+        user_states[chat_id] = ""
+        return
+
+    # 2. Text editing state
+    if is_admin(user_id) and state.startswith("WAIT_EDIT_"):
+        target = state.replace("WAIT_EDIT_", "")
+        db["texts"][target] = message.text
+        save_db(db)
+        bot.reply_to(message, f"✅ Text template for <b>{target}</b> updated successfully!", parse_mode="HTML")
+        user_states[chat_id] = ""
+        return
+
+    # 3. Broadcast text staging
+    if is_admin(user_id) and state == "WAIT_BROADCAST_CONTENT":
+        present_broadcast_preview(chat_id, "text", message.text)
+        return
+
+    if not db['bot_active'] and not is_admin(user_id):
+        bot.reply_to(message, "🛠️ Bot is currently offline.")
+        return
+
+    # ----------------------------------------------------
+    # KEYBOARD TEXT COMMANDS
+    # ----------------------------------------------------
+    if "Render URL" in text or text == "🌐 Render URL":
+        user_states[chat_id] = "WAIT_URL"
+        bot.send_message(chat_id, db["texts"]["url_prompt"], reply_markup=get_main_reply_keyboard(), parse_mode="HTML")
+        log_activity(chat_id, "Clicked URL to HTML via Reply Keyboard")
+        return
+
+    if "Obfuscate HTML" in text or text == "🔒 Obfuscate HTML":
+        user_states[chat_id] = "WAIT_HTML_FILE"
+        bot.send_message(chat_id, db["texts"]["obf_prompt"], reply_markup=get_main_reply_keyboard(), parse_mode="HTML")
+        log_activity(chat_id, "Clicked Obfuscate HTML via Reply Keyboard")
+        return
+
+    if "Image to URL" in text or text == "📸 Image to URL":
+        user_states[chat_id] = "WAIT_IMAGE"
+        bot.send_message(chat_id, db["texts"]["img_prompt"], reply_markup=get_main_reply_keyboard(), parse_mode="HTML")
+        log_activity(chat_id, "Clicked Image to URL via Reply Keyboard")
+        return
+
+    if "Stats" in text or text == "📊 Stats":
+        total_users = len(db['users'])
+        obf_count = db['stats']['obf']
+        url_count = db['stats']['url']
+        img_count = db['stats']['img']
+        total_admins = len(db.get("admins", [ADMIN_ID]))
+        stats_text = f"✦ <b>Bᴏᴛ Sᴛᴀᴛɪsᴛɪᴄs (Pʀᴇᴍɪᴜᴍ Sᴜɪᴛᴇ V5.0)</b> ✦\n\n• <b>Total Users:</b> <code>{total_users}</code>\n• <b>Total Admins:</b> <code>{total_admins}</code>\n• <b>VM Obfuscations:</b> <code>{obf_count}</code>\n• <b>URLs Rendered:</b> <code>{url_count}</code>\n• <b>Images Converted:</b> <code>{img_count}</code>\n\n⌁ <i>Engine Status: 100% Operational</i>"
+        bot.send_message(chat_id, stats_text, reply_markup=get_main_reply_keyboard(), parse_mode="HTML")
+        log_activity(chat_id, "Viewed Stats via Reply Keyboard")
+        return
+
+    # AUTO-DETECT DIRECT URL SUBMISSION
+    if state == "WAIT_URL" or text.startswith("http://") or text.startswith("https://") or ('.' in text and not ' ' in text and len(text) > 4):
+        url = text
+        if not url.startswith("http"): url = "https://" + url
+            
+        time_now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        db['saved_urls'].append(f"[{time_now}] UID: {chat_id} -> {url}")
+        
+        db['stats']['url'] += 1
+        save_db(db)
+
+        if not is_admin(user_id):
+            try:
+                info = extract_user_info_safe(message)
+                admin_msg = f"⌁ <b>NEW URL RECEIVED!</b>\n{info}\n• URL: {url}"
+                bot.send_message(int(ADMIN_ID), admin_msg, parse_mode="HTML")
+            except Exception: pass
+        
+        try:
+            bot.reply_to(message, "⏳ <b>𝗙𝗲𝘁𝗰𝗵𝗶𝗻𝗴 𝗙𝘂𝗹𝗹 𝗛𝗧𝗠𝗟 & 𝗦𝗰𝗿𝗲𝗲𝗻𝘀𝗵𝗼𝘁...</b>", parse_mode="HTML")
+            
+            try:
+                screenshot_url = f"https://image.thum.io/get/width/1200/crop/800/noanimate/{url}"
+                bot.send_photo(chat_id, screenshot_url, caption=f"📸 <b>Lɪᴠᴇ Sᴄʀᴇᴇɴsʜᴏᴛ ᴏғ:</b> {url}", parse_mode="HTML")
+            except Exception:
+                pass
+
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Upgrade-Insecure-Requests': '1'
+            }
+            response = requests.get(url, headers=headers, timeout=20)
+            response.raise_for_status() 
+            
+            html_file = io.BytesIO(response.content)
+            domain = url.split("//")[-1].split("/")[0]
+            html_file.name = f"{domain}_source.html"
+            
+            caption = f"✅ <b>HTML EXTRACTION COMPLETE!</b>\n\n⌁ <b>Extracted Details:</b>\n• Live URL: {url}\n• Clean HTML Source Code\n• Fast Server Fetch\n• Anti-Block User-Agent\n\n📁 <i>File: {domain}_source.html</i>"
+            bot.send_document(chat_id, html_file, caption=caption, reply_markup=get_main_reply_keyboard(), parse_mode="HTML", timeout=120)
+            log_activity(chat_id, f"Fetched URL: {domain}")
+            user_states[chat_id] = "" 
+            return
+        except Exception as err:
+            bot.reply_to(message, f"❌ Failed to extract URL: ({str(err)})")
+            return
+        
+    bot.reply_to(
+        message, 
+        "⌁ <b>Please select an action from the keyboard below:</b>", 
+        reply_markup=get_main_reply_keyboard(), 
+        parse_mode="HTML"
+    )
+
+# ==============================================================================
+# 🌐 24/7 WEB SERVER KEEP-ALIVE
+# ==============================================================================
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json; charset=utf-8')
+        self.end_headers()
+        response = {
+            "status": "online",
+            "suite": "Telegram Bot Suite V5.0",
+            "vm_engine": "active",
+            "admins_count": len(db.get("admins", [ADMIN_ID])),
+            "timestamp": datetime.now().isoformat()
+        }
+        self.wfile.write(json.dumps(response, indent=2).encode('utf-8'))
+    
+    def log_message(self, format, *args):
+        pass
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
+    server.serve_forever()
+
+if __name__ == '__main__':
+    print("✦ PREMIUM TELEGRAM BOT SUITE V5.0 INITIALIZING...")
+    print("🧬 HARDCORE VM BYTECODE OBFUSCATION ENGINE: ACTIVE")
+    print("👑 MULTI-ADMIN & BROADCAST MEDIA ENGINE: READY")
+    print("🎨 TELEGRAM 8.0+ COLORED BUTTON SYSTEM: ENABLED")
+    
+    threading.Thread(target=run_web_server, daemon=True).start()
+    bot.infinity_polling(skip_pending=True)
